@@ -180,7 +180,10 @@ export const TradeScreen: React.FC<TradeScreenProps> = ({ onBack }) => {
             {myCards.map(item => (
               <View key={item.id} style={styles.tradeCardRow}>
                 <View style={styles.cardImageContainer}>
-                  <Image source={{ uri: item.card.imageUrl }} style={styles.cardThumbnail} />
+                  <Image
+                    source={{ uri: item.card.imageUrl || item.card.thumbnailUrl }}
+                    style={styles.cardThumbnail}
+                  />
                   <View style={styles.priceTag}>
                     <Text style={styles.priceTagText}>${item.unitPriceUsd.toFixed(2)}</Text>
                   </View>
@@ -237,7 +240,10 @@ export const TradeScreen: React.FC<TradeScreenProps> = ({ onBack }) => {
             {theirCards.map(item => (
               <View key={item.id} style={styles.tradeCardRow}>
                 <View style={styles.cardImageContainer}>
-                  <Image source={{ uri: item.card.imageUrl }} style={styles.cardThumbnail} />
+                  <Image
+                    source={{ uri: item.card.imageUrl || item.card.thumbnailUrl }}
+                    style={styles.cardThumbnail}
+                  />
                   <View style={styles.priceTag}>
                     <Text style={styles.priceTagText}>${item.unitPriceUsd.toFixed(2)}</Text>
                   </View>

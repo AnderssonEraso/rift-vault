@@ -18,8 +18,10 @@ import { useTheme, FactionThemeKey, ThemeMode } from '@/context/ThemeContext';
 import { useAchievements } from '@/context/AchievementContext';
 import { AchievementCategory } from '@/constants/achievements';
 import { EditProfileModal } from '@/components/profile/EditProfileModal';
+import { AIStudioSettings } from '@/components/profile/AIStudioSettings';
+import { OracleModal } from '@/components/ai/OracleModal';
 
-type ProfileSectionTab = 'achievements' | 'themes' | 'friends';
+type ProfileSectionTab = 'achievements' | 'themes' | 'friends' | 'ai';
 
 export const ProfileScreen: React.FC = () => {
   const { signOut, user } = useAuth();
@@ -30,6 +32,7 @@ export const ProfileScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ProfileSectionTab>('achievements');
   const [selectedAchievementCategory, setSelectedAchievementCategory] = useState<string>('all');
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [isOracleModalOpen, setIsOracleModalOpen] = useState(false);
   const [searchFriendText, setSearchFriendText] = useState('');
   const [newFriendInput, setNewFriendInput] = useState('');
   const [isAddingFriend, setIsAddingFriend] = useState(false);
@@ -114,6 +117,16 @@ export const ProfileScreen: React.FC = () => {
               size={18}
               color={mode === 'dark' ? '#FBBF24' : '#F59E0B'}
             />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeToggleBtn, { backgroundColor: theme.cardHighlight, borderColor: theme.cardBorder }]}
+            onPress={() => {
+              triggerHaptic();
+              setIsOracleModalOpen(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="sparkles" size={17} color={theme.primary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={handleSignOut}>
             <Ionicons name="log-out-outline" size={22} color={theme.danger} />
@@ -265,6 +278,31 @@ export const ProfileScreen: React.FC = () => {
               ]}
             >
               Amigos ({profile.friends.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.tabSelectorItem,
+              activeTab === 'ai' && [styles.activeTabSelectorItem, { backgroundColor: theme.primary }],
+            ]}
+            onPress={() => {
+              triggerHaptic();
+              setActiveTab('ai');
+            }}
+          >
+            <Ionicons
+              name="sparkles-outline"
+              size={16}
+              color={activeTab === 'ai' ? '#FFFFFF' : theme.textMuted}
+            />
+            <Text
+              style={[
+                styles.tabSelectorText,
+                { color: activeTab === 'ai' ? '#FFFFFF' : theme.textMuted },
+              ]}
+            >
+              IA Studio
             </Text>
           </TouchableOpacity>
         </View>
@@ -703,12 +741,28 @@ export const ProfileScreen: React.FC = () => {
             </View>
           </View>
         )}
+
+        {/* ======================================================== */}
+        {/* SECCIÓN 4: GOOGLE AI STUDIO & CONFIGURACIÓN DE IA        */}
+        {/* ======================================================== */}
+        {activeTab === 'ai' && (
+          <View style={styles.sectionWrapper}>
+            <AIStudioSettings onOpenOracleChat={() => setIsOracleModalOpen(true)} />
+          </View>
+        )}
       </ScrollView>
 
       {/* Modal de edición de perfil */}
       <EditProfileModal
         visible={isEditModalVisible}
         onClose={() => setIsEditModalVisible(false)}
+      />
+
+      {/* Modal interactivo del Oráculo de IA (Gemini) */}
+      <OracleModal
+        visible={isOracleModalOpen}
+        onClose={() => setIsOracleModalOpen(false)}
+        onNavigateToSettings={() => setActiveTab('ai')}
       />
     </View>
   );

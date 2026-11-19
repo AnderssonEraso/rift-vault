@@ -17,6 +17,7 @@ import { WishlistProvider } from '@/context/WishlistContext';
 import { DeckProvider } from '@/context/DeckContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { AchievementProvider } from '@/context/AchievementContext';
+import { AIProvider } from '@/context/AIContext';
 import { BottomTabBar, MainTabType } from '@/components/navigation/BottomTabBar';
 import { CardsExplorerScreen } from '@/screens/CardsExplorerScreen';
 import { CollectionScreen } from '@/screens/CollectionScreen';
@@ -85,7 +86,9 @@ function MainNavigator() {
         <WishlistProvider>
           <DeckProvider>
             <AchievementProvider>
-              <AppRoot />
+              <AIProvider>
+                <AppRoot />
+              </AIProvider>
             </AchievementProvider>
           </DeckProvider>
         </WishlistProvider>

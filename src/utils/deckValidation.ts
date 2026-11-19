@@ -17,6 +17,11 @@ export function validateRiftDeck(deck: Deck): DeckLegality {
     errors.push('Falta la carta de Leyenda (debe ser 1/1).');
   }
 
+  const championUnitValid = !deck.legendCard || !!deck.championUnit;
+  if (deck.legendCard && !deck.championUnit) {
+    errors.push('Falta asignar la Unidad Campeón (Champ Unit) de la Leyenda.');
+  }
+
   const totalRunes = (deck.runes || []).reduce((acc, r) => acc + r.count, 0);
   const runesValid = totalRunes === 12;
   if (!runesValid) {
@@ -67,6 +72,7 @@ export function validateRiftDeck(deck: Deck): DeckLegality {
 
   const isValid =
     legendValid &&
+    championUnitValid &&
     runesValid &&
     battlefieldsValid &&
     mainDeckValid &&
@@ -77,6 +83,7 @@ export function validateRiftDeck(deck: Deck): DeckLegality {
     isValid,
     errors,
     legendValid,
+    championUnitValid,
     runesValid,
     battlefieldsValid,
     mainDeckValid,

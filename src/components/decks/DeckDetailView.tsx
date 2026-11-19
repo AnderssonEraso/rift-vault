@@ -5,19 +5,23 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Image,
   Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Deck, DeckCardSlot } from '@/types/deck';
 import { calculateDeckStats } from '@/utils/deckValidation';
+import { getCardImageUrl } from '@/services/openRiftApi';
 import { ExportDeckModal } from './ExportDeckModal';
 import { EditDeckModal } from './EditDeckModal';
 import { DeckCollectionAnalysisModal } from './DeckCollectionAnalysisModal';
 import { RecordMatchModal } from './RecordMatchModal';
 import { PublishDeckModal } from './PublishDeckModal';
+import { OracleModal } from '@/components/ai/OracleModal';
+import { AddCardToDeckModal } from './AddCardToDeckModal';
 import { analyzeDeckCollection } from '@/utils/deckCollectionAnalysis';
 import { useCollection } from '@/context/CollectionContext';
+import { useDecks } from '@/context/DeckContext';
 import { MatchRepository } from '@/services/matchRepository';
 import { DeckMatchRecord } from '@/types/match';
 
@@ -42,10 +46,77 @@ export const DeckDetailView: React.FC<DeckDetailViewProps> = ({
   const [isCollectionAnalysisModalOpen, setIsCollectionAnalysisModalOpen] = useState(false);
   const [isRecordMatchModalOpen, setIsRecordMatchModalOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [isOracleOpen, setIsOracleOpen] = useState(false);
+  const [isAddCardModalOpen, setIsAddCardModalOpen] = useState(false);
+  const [addCardInitialType, setAddCardInitialType] = useState<string>('All');
+  const [isLegalityExpanded, setIsLegalityExpanded] = useState(false);
   const [matches, setMatches] = useState<DeckMatchRecord[]>([]);
 
+  const { setCardCountInDeck } = useDecks();
   const stats = calculateDeckStats(deck);
   const { getCardOwnership } = useCollection();
+
+  const getDomainMeta = (dom?: string) => {
+    const d = (dom || '').toLowerCase();
+    switch (d) {
+      case 'fury':
+        return { icon: 'flame', color: '#EF4444', label: 'Furia', bg: 'rgba(239, 68, 68, 0.15)' };
+      case 'calm':
+        return { icon: 'water', color: '#0AC8B9', label: 'Calma', bg: 'rgba(10, 200, 185, 0.15)' };
+      case 'mind':
+        return { icon: 'eye', color: '#3B82F6', label: 'Mente', bg: 'rgba(59, 130, 246, 0.15)' };
+      case 'body':
+        return { icon: 'fitness', color: '#10B981', label: 'Cuerpo', bg: 'rgba(16, 185, 129, 0.15)' };
+      case 'chaos':
+        return { icon: 'flash', color: '#A855F7', label: 'Caos', bg: 'rgba(168, 85, 247, 0.15)' };
+      case 'order':
+        return { icon: 'shield-checkmark', color: '#EAB308', label: 'Orden', bg: 'rgba(234, 179, 8, 0.15)' };
+      default:
+        return { icon: 'sparkles', color: '#94A3B8', label: dom || 'Incoloro', bg: 'rgba(148, 163, 184, 0.15)' };
+    }
+  };
+
+  // Runas dinámicas vinculadas a la leyenda y dominios actuales del mazo
+  const effectiveRunes = useMemo(() => {
+    if (deck.runes && deck.runes.length > 0 && deck.runes.some(r => r.domain && r.domain !== 'neutral')) {
+      return deck.runes;
+    }
+    const doms = deck.legendCard?.domains || deck.domains || [];
+    if (doms.length === 1) {
+      return [{ id: '1', domain: doms[0].toLowerCase(), count: 12 }];
+    }
+    if (doms.length >= 2) {
+      return [
+        { id: '1', domain: doms[0].toLowerCase(), count: 6 },
+        { id: '2', domain: doms[1].toLowerCase(), count: 6 },
+      ];
+    }
+    return [
+      { id: '1', domain: 'fury', count: 6 },
+      { id: '2', domain: 'chaos', count: 6 },
+    ];
+  }, [deck.runes, deck.legendCard, deck.domains]);
+
+  const championName = useMemo(() => {
+    if (!deck.legendCard?.name) return '';
+    return deck.legendCard.name.split(',')[0].trim();
+  }, [deck.legendCard]);
+
+  const handleOpenAddCardModal = (type: string = 'All') => {
+    setAddCardInitialType(type);
+    setIsAddCardModalOpen(true);
+  };
+
+  const handleOpenChampUnitModal = () => {
+    if (!deck.legendCard) {
+      Alert.alert(
+        'Falta la Leyenda',
+        'Debes seleccionar primero la Leyenda en la casilla superior para saber qué Campeón asignar.'
+      );
+      return;
+    }
+    handleOpenAddCardModal('ChampUnit');
+  };
 
   // Cruce con colección física del usuario
   const collectionAnalysis = useMemo(
@@ -77,9 +148,47 @@ export const DeckDetailView: React.FC<DeckDetailViewProps> = ({
     const isOwned = ownedCopies >= slot.count;
 
     return (
-      <View key={slot.cardId} style={styles.gridCardItem}>
+      <TouchableOpacity
+        key={slot.cardId}
+        style={styles.gridCardItem}
+        onPress={() => {
+          Alert.alert(slot.card.name, `Copias en el mazo: ${slot.count}/3`, [
+            {
+              text: '+1 Copia',
+              onPress: () => {
+                if (slot.count < 3) {
+                  setCardCountInDeck(deck.id, slot.card, slot.count + 1);
+                } else {
+                  Alert.alert('Límite', 'Máximo 3 copias permitidas por reglamento.');
+                }
+              },
+            },
+            {
+              text: '-1 Copia',
+              onPress: () => {
+                setCardCountInDeck(deck.id, slot.card, slot.count - 1);
+              },
+            },
+            {
+              text: 'Eliminar del mazo',
+              style: 'destructive',
+              onPress: () => {
+                setCardCountInDeck(deck.id, slot.card, 0);
+              },
+            },
+            { text: 'Cancelar', style: 'cancel' },
+          ]);
+        }}
+        activeOpacity={0.8}
+      >
         <View style={styles.cardImageWrapper}>
-          <Image source={{ uri: slot.card.imageUrl }} style={styles.gridCardImage} />
+          <Image
+            source={{ uri: getCardImageUrl(slot.card) }}
+            style={styles.gridCardImage}
+            contentFit="cover"
+            transition={150}
+            cachePolicy="memory-disk"
+          />
 
           {/* Coste de energía / maná en esquina superior izquierda */}
           {slot.card.energyCost !== undefined && (
@@ -132,7 +241,7 @@ export const DeckDetailView: React.FC<DeckDetailViewProps> = ({
         <Text style={styles.cardPrice}>
           ${(slot.card.marketPriceUsd || 0.10).toFixed(2)}
         </Text>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -166,12 +275,35 @@ export const DeckDetailView: React.FC<DeckDetailViewProps> = ({
         </View>
 
         <View style={styles.rightActions}>
+          <TouchableOpacity
+            onPress={() => handleOpenAddCardModal('All')}
+            style={styles.addCardTopBtn}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="add" size={17} color="#FFFFFF" style={{ marginRight: 2 }} />
+            <Text style={styles.addCardTopBtnText}>Agregar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setIsOracleOpen(true)}
+            style={styles.iconBtn}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="sparkles" size={20} color="#C084FC" />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => setIsExportModalOpen(true)} style={styles.iconBtn}>
             <Ionicons name="share-outline" size={22} color="#CBD5E1" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() =>
               Alert.alert('Opciones del Mazo', 'Selecciona una acción:', [
+                {
+                  text: '➕ Agregar cartas al mazo',
+                  onPress: () => handleOpenAddCardModal('All'),
+                },
+                {
+                  text: '✨ Analizar con IA (Oráculo Gemini)',
+                  onPress: () => setIsOracleOpen(true),
+                },
                 {
                   text: 'Publicar en la Comunidad (Hub)',
                   onPress: () => setIsPublishModalOpen(true),
@@ -276,30 +408,129 @@ export const DeckDetailView: React.FC<DeckDetailViewProps> = ({
           </View>
         </View>
 
+        {/* Banner de Reglamento Oficial (Colapsable y estilizado) */}
+        {stats.legality.isValid ? (
+          <View style={styles.legalitySuccessBanner}>
+            <Ionicons name="checkmark-circle" size={18} color="#10B981" />
+            <Text style={styles.legalitySuccessText}>
+              Mazo reglamentario oficial (40 cartas • 3 campos • 1 leyenda • 12 runas)
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.legalityBanner}>
+            <TouchableOpacity
+              style={styles.legalityBannerHeader}
+              onPress={() => setIsLegalityExpanded(prev => !prev)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.legalityBannerHeaderLeft}>
+                <Ionicons name="warning-outline" size={18} color="#EF4444" />
+                <View style={{ marginLeft: 8 }}>
+                  <Text style={styles.legalityBannerTitle}>
+                    El mazo no es válido ({stats.legality.errors.length} {stats.legality.errors.length === 1 ? 'requisito' : 'requisitos'})
+                  </Text>
+                  <Text style={styles.legalityBannerSubtitle}>
+                    {isLegalityExpanded ? 'Toca para contraer' : 'Toca para ver los requisitos faltantes'}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons
+                name={isLegalityExpanded ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color="#94A3B8"
+              />
+            </TouchableOpacity>
+
+            {isLegalityExpanded && (
+              <View style={styles.legalityDetailsBox}>
+                {stats.legality.errors.map((err, idx) => (
+                  <View key={idx} style={styles.legalityErrorRow}>
+                    <Ionicons name="close-circle" size={15} color="#EF4444" style={{ marginTop: 2 }} />
+                    <Text style={styles.legalityErrorText}>{err}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         {activeTab === 'list' ? (
           <>
-            {/* SECCIÓN 1: LEYENDA (1/1) Y RUNES (12/12) FIEL A SCREENSHOT 6 */}
+            {/* SECCIÓN 1: LEYENDA (1/1) Y RUNES (12/12) */}
             <View style={styles.legendRunesRow}>
               {/* Leyenda */}
               <View style={styles.legendBox}>
-                <Text style={styles.sectionTitle}>
-                  Leyenda <Text style={styles.sectionCounter}>({deck.legendCard ? '1/1' : '0/1'})</Text>
-                </Text>
+                <View style={styles.sectionHeaderFlex}>
+                  <Text style={styles.sectionTitle}>
+                    Leyenda <Text style={styles.sectionCounter}>({deck.legendCard ? '1/1' : '0/1'})</Text>
+                  </Text>
+                  {deck.legendCard && (
+                    <TouchableOpacity
+                      onPress={() => handleOpenAddCardModal('Legend')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.changeActionText}>Cambiar</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
                 {deck.legendCard ? (
-                  <View style={styles.legendCardPreview}>
-                    <Image source={{ uri: deck.legendCard.imageUrl }} style={styles.legendImg} />
+                  <TouchableOpacity
+                    style={styles.legendCardPreview}
+                    onPress={() => handleOpenAddCardModal('Legend')}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.legendImgWrapper}>
+                      <Image
+                        source={{ uri: getCardImageUrl(deck.legendCard) }}
+                        style={styles.legendImg}
+                        contentFit="cover"
+                        transition={150}
+                        cachePolicy="memory-disk"
+                      />
+                      <View style={styles.championBadge}>
+                        <Ionicons name="trophy" size={10} color="#EAB308" />
+                        <Text style={styles.championBadgeText}>CAMPEÓN</Text>
+                      </View>
+                    </View>
                     <Text style={styles.legendName} numberOfLines={2}>
                       {deck.legendCard.name}
                     </Text>
-                    <Text style={styles.legendPrice}>
-                      ${(deck.legendCard.marketPriceUsd || 0.17).toFixed(2)}
-                    </Text>
-                  </View>
+                    <View style={styles.legendDomainsRow}>
+                      {(deck.legendCard.domains || deck.domains || []).map((dom, idx) => {
+                        const meta = getDomainMeta(dom);
+                        return (
+                          <View
+                            key={idx}
+                            style={[
+                              styles.legendDomainMiniPill,
+                              { backgroundColor: meta.bg, borderColor: meta.color },
+                            ]}
+                          >
+                            <Ionicons name={meta.icon as any} size={9} color={meta.color} />
+                            <Text style={[styles.legendDomainMiniPillText, { color: meta.color }]}>
+                              {meta.label}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </TouchableOpacity>
                 ) : (
-                  <View style={styles.emptySlot}>
-                    <Ionicons name="add" size={28} color="#64748B" />
-                    <Text style={styles.emptySlotText}>Añadir Leyenda</Text>
-                  </View>
+                  <TouchableOpacity
+                    style={[styles.emptySlot, styles.emptySlotClickable]}
+                    onPress={() => handleOpenAddCardModal('Legend')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.emptySlotIconCircle}>
+                      <Ionicons name="trophy-outline" size={26} color="#EAB308" />
+                    </View>
+                    <Text style={styles.emptySlotMainText}>Pick your Legend</Text>
+                    <Text style={styles.emptySlotSubText}>Elegir Leyenda</Text>
+                    <View style={styles.emptySlotAddPill}>
+                      <Ionicons name="add" size={13} color="#3B82F6" />
+                      <Text style={styles.emptySlotAddPillText}>Asignar</Text>
+                    </View>
+                  </TouchableOpacity>
                 )}
               </View>
 
@@ -309,36 +540,81 @@ export const DeckDetailView: React.FC<DeckDetailViewProps> = ({
                   Runes <Text style={styles.sectionCounter}>({stats.runesCount}/12)</Text>
                 </Text>
                 <View style={styles.runesGrid}>
-                  {(deck.runes || []).map(r => (
-                    <View key={r.id} style={styles.runeSlot}>
-                      <View style={styles.runeIconCircle}>
-                        <Ionicons
-                          name={r.domain === 'calm' ? 'water' : r.domain === 'order' ? 'shield' : 'flame'}
-                          size={28}
-                          color={r.domain === 'calm' ? '#0AC8B9' : r.domain === 'order' ? '#EAB308' : '#EF4444'}
-                        />
+                  {effectiveRunes.map(r => {
+                    const meta = getDomainMeta(r.domain);
+                    return (
+                      <View
+                        key={r.id}
+                        style={[
+                          styles.runeSlot,
+                          { borderColor: `${meta.color}44`, backgroundColor: '#0F1522' },
+                        ]}
+                      >
+                        <View style={[styles.runeIconCircle, { backgroundColor: meta.bg }]}>
+                          <Ionicons
+                            name={meta.icon as any}
+                            size={22}
+                            color={meta.color}
+                          />
+                        </View>
+                        <View style={styles.runeInfoCol}>
+                          <Text style={styles.runeCount}>{r.count}</Text>
+                          <Text style={[styles.runeDomainLabel, { color: meta.color }]}>
+                            {meta.label}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={styles.runeCount}>{r.count}</Text>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               </View>
             </View>
 
             {/* SECCIÓN 2: CAMPOS DE BATALLA (3/3) FIEL A SCREENSHOT 6 */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionTitle}>
-                Campos de batalla <Text style={styles.sectionCounter}>({stats.battlefieldsCount}/3)</Text>
-              </Text>
+              <View style={styles.sectionHeaderFlex}>
+                <Text style={styles.sectionTitle}>
+                  Campos de batalla <Text style={styles.sectionCounter}>({stats.battlefieldsCount}/3)</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.addMiniActionBtn}
+                  onPress={() => handleOpenAddCardModal('Battlefield')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add" size={14} color="#3B82F6" />
+                  <Text style={styles.addMiniActionText}>Añadir campo</Text>
+                </TouchableOpacity>
+              </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.battlefieldsRow}>
                 {(deck.battlefields || []).map(bf => (
-                  <View key={bf.cardId} style={styles.battlefieldCard}>
-                    <Image source={{ uri: bf.card.imageUrl }} style={styles.battlefieldImg} />
+                  <TouchableOpacity
+                    key={bf.cardId}
+                    style={styles.battlefieldCard}
+                    onPress={() => handleOpenAddCardModal('Battlefield')}
+                    activeOpacity={0.8}
+                  >
+                    <Image
+                      source={{ uri: getCardImageUrl(bf.card) }}
+                      style={styles.battlefieldImg}
+                      contentFit="cover"
+                      transition={150}
+                      cachePolicy="memory-disk"
+                    />
                     <Text style={styles.battlefieldTitle} numberOfLines={2}>
                       {bf.card.name}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 ))}
+                {(deck.battlefields || []).length < 3 && (
+                  <TouchableOpacity
+                    style={styles.addBattlefieldSlot}
+                    onPress={() => handleOpenAddCardModal('Battlefield')}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="add-circle-outline" size={26} color="#3B82F6" />
+                    <Text style={styles.addBattlefieldSlotText}>Añadir Campo</Text>
+                  </TouchableOpacity>
+                )}
               </ScrollView>
             </View>
 
@@ -348,52 +624,212 @@ export const DeckDetailView: React.FC<DeckDetailViewProps> = ({
                 <Text style={styles.sectionTitle}>
                   Mazo principal <Text style={styles.sectionCounter}>({stats.totalCards}/40)</Text>
                 </Text>
-                <View style={styles.sortIndicator}>
-                  <Ionicons name="arrow-down" size={14} color="#94A3B8" />
-                  <Text style={styles.sortText}>Nombre</Text>
-                </View>
+                <TouchableOpacity
+                  style={styles.addMainDeckHeaderBtn}
+                  onPress={() => handleOpenAddCardModal('All')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="add" size={15} color="#FFFFFF" style={{ marginRight: 2 }} />
+                  <Text style={styles.addMainDeckHeaderBtnText}>Añadir Cartas</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Casilla destacada: Champ Unit (Campeón elegido) + Slot '+' (Fiel a Screenshot) */}
+              <View style={styles.champUnitSectionRow}>
+                {/* Casilla 1: Champ Unit de la Leyenda */}
+                {deck.championUnit ? (
+                  <TouchableOpacity
+                    style={styles.champUnitCardPreview}
+                    onPress={handleOpenChampUnitModal}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.champUnitImgWrapper}>
+                      <Image
+                        source={{ uri: getCardImageUrl(deck.championUnit) }}
+                        style={styles.champUnitImg}
+                        contentFit="cover"
+                        transition={150}
+                        cachePolicy="memory-disk"
+                      />
+                      <View style={styles.champUnitBadgePill}>
+                        <Ionicons name="ribbon" size={10} color="#38BDF8" style={{ marginRight: 2 }} />
+                        <Text style={styles.champUnitBadgePillText}>CAMPEÓN</Text>
+                      </View>
+                      {deck.championUnit.energyCost !== undefined && (
+                        <View style={styles.champUnitCostBadge}>
+                          <Text style={styles.champUnitCostText}>{deck.championUnit.energyCost}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.champUnitCardTitle} numberOfLines={1}>
+                      {deck.championUnit.name}
+                    </Text>
+                    <Text style={styles.champUnitCardSubtitle}>Campeón elegido</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.champUnitEmptySlot,
+                      !deck.legendCard && styles.champUnitSlotDisabled,
+                    ]}
+                    onPress={handleOpenChampUnitModal}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.champUnitIconWrap, !deck.legendCard && { borderColor: '#334155', backgroundColor: 'transparent' }]}>
+                      <Ionicons
+                        name="ribbon-outline"
+                        size={28}
+                        color={deck.legendCard ? '#38BDF8' : '#64748B'}
+                      />
+                    </View>
+                    <Text style={[styles.champUnitSlotTitle, !deck.legendCard && { color: '#64748B' }]}>
+                      Campeón elegido
+                    </Text>
+                    {deck.legendCard ? (
+                      <Text style={styles.champUnitSlotChampName} numberOfLines={1}>
+                        {championName}
+                      </Text>
+                    ) : (
+                      <Text style={styles.champUnitSlotChampName}>
+                        (Elige Leyenda)
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {/* Casilla 2: Añadir carta al mazo principal '+' */}
+                <TouchableOpacity
+                  style={styles.addCardSlotSquare}
+                  onPress={() => handleOpenAddCardModal('All')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add" size={32} color="#64748B" />
+                </TouchableOpacity>
               </View>
 
               {/* Sub-sección: Unidades */}
-              <Text style={styles.subCategoryTitle}>
-                Unidades <Text style={styles.subCategoryCount}>({stats.unitsCount})</Text>
-              </Text>
-              <View style={styles.cardsGrid}>
-                {(deck.mainUnits || []).map(renderCardGridItem)}
+              <View style={styles.subCategoryHeaderRow}>
+                <Text style={styles.subCategoryTitle}>
+                  Unidades <Text style={styles.subCategoryCount}>({stats.unitsCount})</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.addCategoryMiniBtn}
+                  onPress={() => handleOpenAddCardModal('Unit')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add" size={13} color="#3B82F6" />
+                  <Text style={styles.addCategoryMiniText}>Añadir</Text>
+                </TouchableOpacity>
               </View>
+              {(deck.mainUnits || []).length === 0 ? (
+                <TouchableOpacity
+                  style={styles.emptyCategoryPlaceholder}
+                  onPress={() => handleOpenAddCardModal('Unit')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="person-add-outline" size={20} color="#3B82F6" />
+                  <Text style={styles.emptyCategoryPlaceholderText}>
+                    No hay unidades en el mazo. Toca para añadir.
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.cardsGrid}>
+                  {(deck.mainUnits || []).map(renderCardGridItem)}
+                </View>
+              )}
 
               {/* Sub-sección: Gear */}
-              <Text style={styles.subCategoryTitle}>
-                Gear <Text style={styles.subCategoryCount}>({stats.gearsCount})</Text>
-              </Text>
-              <View style={styles.cardsGrid}>
-                {(deck.mainGear || []).map(renderCardGridItem)}
+              <View style={styles.subCategoryHeaderRow}>
+                <Text style={styles.subCategoryTitle}>
+                  Gear <Text style={styles.subCategoryCount}>({stats.gearsCount})</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.addCategoryMiniBtn}
+                  onPress={() => handleOpenAddCardModal('Gear')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add" size={13} color="#3B82F6" />
+                  <Text style={styles.addCategoryMiniText}>Añadir</Text>
+                </TouchableOpacity>
               </View>
+              {(deck.mainGear || []).length === 0 ? (
+                <TouchableOpacity
+                  style={styles.emptyCategoryPlaceholder}
+                  onPress={() => handleOpenAddCardModal('Gear')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="shield-outline" size={20} color="#3B82F6" />
+                  <Text style={styles.emptyCategoryPlaceholderText}>
+                    No hay equipo (Gear). Toca para añadir.
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.cardsGrid}>
+                  {(deck.mainGear || []).map(renderCardGridItem)}
+                </View>
+              )}
 
               {/* Sub-sección: Hechizos */}
-              <Text style={styles.subCategoryTitle}>
-                Hechizos <Text style={styles.subCategoryCount}>({stats.spellsCount})</Text>
-              </Text>
-              <View style={styles.cardsGrid}>
-                {(deck.mainSpells || []).map(renderCardGridItem)}
+              <View style={styles.subCategoryHeaderRow}>
+                <Text style={styles.subCategoryTitle}>
+                  Hechizos <Text style={styles.subCategoryCount}>({stats.spellsCount})</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.addCategoryMiniBtn}
+                  onPress={() => handleOpenAddCardModal('Spell')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add" size={13} color="#3B82F6" />
+                  <Text style={styles.addCategoryMiniText}>Añadir</Text>
+                </TouchableOpacity>
               </View>
+              {(deck.mainSpells || []).length === 0 ? (
+                <TouchableOpacity
+                  style={styles.emptyCategoryPlaceholder}
+                  onPress={() => handleOpenAddCardModal('Spell')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="flash-outline" size={20} color="#3B82F6" />
+                  <Text style={styles.emptyCategoryPlaceholderText}>
+                    No hay hechizos (Spells). Toca para añadir.
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.cardsGrid}>
+                  {(deck.mainSpells || []).map(renderCardGridItem)}
+                </View>
+              )}
             </View>
 
             {/* SECCIÓN 4: MAZO SECUNDARIO (0/10) FIEL A SCREENSHOT 9 */}
-            <View style={styles.collapsedSectionRow}>
+            <TouchableOpacity
+              style={styles.collapsedSectionRow}
+              onPress={() => handleOpenAddCardModal('All')}
+              activeOpacity={0.7}
+            >
               <Text style={styles.collapsedTitle}>
                 Mazo secundario <Text style={styles.collapsedCount}>({stats.sideboardCount}/10)</Text>
               </Text>
-              <Ionicons name="chevron-down" size={20} color="#64748B" />
-            </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="add-circle-outline" size={18} color="#3B82F6" />
+                <Ionicons name="chevron-down" size={20} color="#64748B" />
+              </View>
+            </TouchableOpacity>
 
             {/* SECCIÓN 5: EN CONSIDERACIÓN (0/100) FIEL A SCREENSHOT 9 */}
-            <View style={styles.collapsedSectionRow}>
+            <TouchableOpacity
+              style={styles.collapsedSectionRow}
+              onPress={() => handleOpenAddCardModal('All')}
+              activeOpacity={0.7}
+            >
               <Text style={styles.collapsedTitle}>
                 En consideración <Text style={styles.collapsedCount}>({stats.maybeboardCount}/100)</Text>
               </Text>
-              <Ionicons name="chevron-down" size={20} color="#64748B" />
-            </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="add-circle-outline" size={18} color="#3B82F6" />
+                <Ionicons name="chevron-down" size={20} color="#64748B" />
+              </View>
+            </TouchableOpacity>
           </>
         ) : activeTab === 'stats' ? (
           /* TAB DE ESTADÍSTICAS */
@@ -579,15 +1015,24 @@ export const DeckDetailView: React.FC<DeckDetailViewProps> = ({
         )}
       </ScrollView>
 
-      {/* Floating Button "Editar el mazo" Fiel a Screenshots 6-9 */}
+      {/* Floating Buttons: Añadir Cartas & Editar Mazo */}
       <View style={styles.floatingActionContainer}>
+        <TouchableOpacity
+          style={styles.addCardsFloatingButton}
+          onPress={() => handleOpenAddCardModal('All')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add-circle" size={19} color="#FFFFFF" style={{ marginRight: 6 }} />
+          <Text style={styles.addCardsFloatingButtonText}>Añadir cartas</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.editDeckButton}
           onPress={() => onEditDeck?.()}
           activeOpacity={0.85}
         >
-          <Ionicons name="create-outline" size={18} color="#090D14" style={{ marginRight: 8 }} />
-          <Text style={styles.editDeckButtonText}>Editar el mazo</Text>
+          <Ionicons name="create-outline" size={18} color="#CBD5E1" style={{ marginRight: 6 }} />
+          <Text style={styles.editDeckButtonText}>Editar</Text>
         </TouchableOpacity>
       </View>
       {/* Modales */}
@@ -627,6 +1072,21 @@ export const DeckDetailView: React.FC<DeckDetailViewProps> = ({
           await MatchRepository.recordMatch(data);
           loadMatches();
         }}
+      />
+
+      {/* Oráculo de IA para análisis táctico de este mazo */}
+      <OracleModal
+        visible={isOracleOpen}
+        onClose={() => setIsOracleOpen(false)}
+        initialDeckFocus={deck}
+      />
+
+      {/* Modal de Lista de Cartas para Agregar al Mazo */}
+      <AddCardToDeckModal
+        visible={isAddCardModalOpen}
+        deck={deck}
+        initialType={addCardInitialType}
+        onClose={() => setIsAddCardModalOpen(false)}
       />
     </View>
   );
@@ -698,6 +1158,21 @@ const styles = StyleSheet.create({
   rightActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+  },
+  addCardTopBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 4,
+  },
+  addCardTopBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   tabsRow: {
     flexDirection: 'row',
@@ -725,10 +1200,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 90,
+    paddingBottom: 140, // Espacio amplio para que los botones flotantes no tapen la lista
   },
   viewsBadgeRow: {
-    marginBottom: 14,
+    marginBottom: 10,
   },
   viewsBadge: {
     flexDirection: 'row',
@@ -746,6 +1221,74 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     marginLeft: 4,
   },
+  /* Banner de Reglamento Elegante y Colapsable */
+  legalitySuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 16,
+    gap: 8,
+  },
+  legalitySuccessText: {
+    color: '#34D399',
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
+  },
+  legalityBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  legalityBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  legalityBannerHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  legalityBannerTitle: {
+    color: '#F87171',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  legalityBannerSubtitle: {
+    color: '#94A3B8',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  legalityDetailsBox: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(239, 68, 68, 0.15)',
+    gap: 6,
+  },
+  legalityErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  legalityErrorText: {
+    color: '#FCA5A5',
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
+  },
   legendRunesRow: {
     flexDirection: 'row',
     gap: 12,
@@ -758,13 +1301,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
     color: '#F8FAFC',
     marginBottom: 10,
   },
   sectionCounter: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748B',
     fontWeight: '600',
   },
@@ -776,60 +1319,152 @@ const styles = StyleSheet.create({
     borderColor: '#1E293B',
     alignItems: 'center',
   },
+  legendImgWrapper: {
+    width: '100%',
+    height: 175,
+    borderRadius: 10,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#1E293B',
+    marginBottom: 6,
+  },
   legendImg: {
     width: '100%',
-    height: 180,
-    borderRadius: 10,
-    backgroundColor: '#1E293B',
-    marginBottom: 8,
+    height: '100%',
+  },
+  championBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(9, 13, 20, 0.85)',
+    borderWidth: 1,
+    borderColor: '#EAB308',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    gap: 3,
+  },
+  championBadgeText: {
+    color: '#FACC15',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   legendName: {
     fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
     textAlign: 'center',
+    marginTop: 2,
   },
-  legendPrice: {
-    fontSize: 11,
-    color: '#60A5FA',
-    marginTop: 4,
-    fontWeight: '600',
+  legendDomainsRow: {
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 5,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  legendDomainMiniPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    gap: 3,
+  },
+  legendDomainMiniPillText: {
+    fontSize: 9,
+    fontWeight: '700',
   },
   emptySlot: {
-    height: 180,
+    height: 220,
     borderRadius: 14,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#26334D',
+    borderColor: 'rgba(59, 130, 246, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(22, 31, 48, 0.4)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    padding: 12,
   },
-  emptySlotText: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 6,
+  emptySlotIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(234, 179, 8, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(234, 179, 8, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  emptySlotMainText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    textAlign: 'center',
+  },
+  emptySlotSubText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  emptySlotAddPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.35)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 10,
+    gap: 3,
+  },
+  emptySlotAddPillText: {
+    color: '#60A5FA',
+    fontSize: 11,
+    fontWeight: '700',
   },
   runesGrid: {
     gap: 10,
   },
   runeSlot: {
-    backgroundColor: '#0F1522',
     borderRadius: 14,
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#1E293B',
-    height: 85,
+    height: 105,
+    gap: 12,
   },
   runeIconCircle: {
-    marginBottom: 4,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  runeInfoCol: {
+    justifyContent: 'center',
   },
   runeCount: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: '900',
     color: '#FFFFFF',
+    lineHeight: 24,
+  },
+  runeDomainLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   sectionBlock: {
     marginBottom: 24,
@@ -864,6 +1499,135 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 6,
+  },
+  champUnitSectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  champUnitCardPreview: {
+    width: 120,
+    backgroundColor: '#0F1522',
+    borderRadius: 12,
+    padding: 6,
+    borderWidth: 1.5,
+    borderColor: '#38BDF8',
+    alignItems: 'center',
+  },
+  champUnitImgWrapper: {
+    width: '100%',
+    height: 140,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#161F30',
+  },
+  champUnitImg: {
+    width: '100%',
+    height: '100%',
+  },
+  champUnitBadgePill: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(9, 13, 20, 0.85)',
+    borderWidth: 1,
+    borderColor: '#38BDF8',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  champUnitBadgePillText: {
+    color: '#38BDF8',
+    fontSize: 8,
+    fontWeight: '800',
+  },
+  champUnitCostBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+    borderWidth: 1,
+    borderColor: '#38BDF8',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  champUnitCostText: {
+    color: '#38BDF8',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  champUnitCardTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  champUnitCardSubtitle: {
+    fontSize: 9,
+    color: '#38BDF8',
+    fontWeight: '600',
+  },
+  champUnitEmptySlot: {
+    width: 120,
+    height: 165,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(56, 189, 248, 0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 8,
+  },
+  champUnitSlotDisabled: {
+    borderColor: '#26334D',
+    backgroundColor: 'rgba(15, 23, 42, 0.3)',
+    opacity: 0.7,
+  },
+  champUnitIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  champUnitSlotTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#38BDF8',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  champUnitSlotChampName: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginTop: 4,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  addCardSlotSquare: {
+    width: 120,
+    height: 165,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#26334D',
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sortIndicator: {
     flexDirection: 'row',
@@ -981,20 +1745,142 @@ const styles = StyleSheet.create({
   collapsedCount: {
     color: '#64748B',
   },
+  sectionHeaderFlex: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  changeActionText: {
+    fontSize: 12,
+    color: '#3B82F6',
+    fontWeight: '700',
+  },
+  emptySlotClickable: {
+    borderColor: 'rgba(59, 130, 246, 0.4)',
+    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+  },
+  addMiniActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  addMiniActionText: {
+    fontSize: 11,
+    color: '#60A5FA',
+    fontWeight: '700',
+    marginLeft: 2,
+  },
+  addBattlefieldSlot: {
+    width: 140,
+    height: 126,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(59, 130, 246, 0.4)',
+    backgroundColor: 'rgba(59, 130, 246, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addBattlefieldSlotText: {
+    fontSize: 11,
+    color: '#60A5FA',
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  addMainDeckHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  addMainDeckHeaderBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  subCategoryHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  addCategoryMiniBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  addCategoryMiniText: {
+    color: '#60A5FA',
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 2,
+  },
+  emptyCategoryPlaceholder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0F1522',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#1E293B',
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    gap: 8,
+  },
+  emptyCategoryPlaceholderText: {
+    color: '#8E9AA8',
+    fontSize: 12,
+    fontWeight: '500',
+  },
   floatingActionContainer: {
     position: 'absolute',
     bottom: 20,
     left: 0,
     right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+  },
+  addCardsFloatingButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  addCardsFloatingButtonText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   editDeckButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#334155',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -1003,8 +1889,8 @@ const styles = StyleSheet.create({
   },
   editDeckButtonText: {
     fontSize: 14,
-    fontWeight: '800',
-    color: '#090D14',
+    fontWeight: '700',
+    color: '#CBD5E1',
   },
   statsTabContent: {
     paddingVertical: 10,

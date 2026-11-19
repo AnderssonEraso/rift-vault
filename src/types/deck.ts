@@ -4,6 +4,7 @@ export interface DeckCardSlot {
   cardId: string;
   card: RiftCard;
   count: number;
+  isOwned?: boolean;
 }
 
 export interface DeckRuneSlot {
@@ -17,6 +18,7 @@ export interface DeckLegality {
   isValid: boolean;
   errors: string[];
   legendValid: boolean;
+  championUnitValid?: boolean;
   runesValid: boolean;
   battlefieldsValid: boolean;
   mainDeckValid: boolean;
@@ -30,6 +32,7 @@ export interface Deck {
   description?: string;
   coverImage?: string;
   legendCard?: RiftCard;
+  championUnit?: RiftCard; // Unidad Campeón de la Leyenda
   domains: string[];
   viewsCount: number;
   isPublic: boolean;

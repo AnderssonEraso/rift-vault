@@ -1,10 +1,12 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Deck } from '@/types/deck';
 import { validateRiftDeck } from '@/utils/deckValidation';
 import { useCollection } from '@/context/CollectionContext';
 import { analyzeDeckCollection } from '@/utils/deckCollectionAnalysis';
+import { getCardImageUrl } from '@/services/openRiftApi';
 
 interface DeckListItemProps {
   deck: Deck;
@@ -61,10 +63,13 @@ export const DeckListItem: React.FC<DeckListItemProps> = ({
           source={{
             uri:
               deck.coverImage ||
-              deck.legendCard?.imageUrl ||
+              getCardImageUrl(deck.legendCard) ||
               'https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Zed_0.jpg',
           }}
           style={styles.coverImage}
+          contentFit="cover"
+          transition={150}
+          cachePolicy="memory-disk"
         />
         {deck.legendCard && (
           <View style={styles.legendBadge}>

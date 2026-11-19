@@ -28,6 +28,31 @@ export function buildCardImageUrl(
 }
 
 /**
+ * Resuelve de forma segura y consistente la URL de la imagen de una carta,
+ * comprobando imageUrl, thumbnailUrl, highresUrl o imageId según disponibilidad.
+ */
+export function getCardImageUrl(
+  card?: Partial<RiftCard> | null,
+  size: '120w' | '240w' | '400w' | 'full' = '400w'
+): string {
+  if (!card) return 'https://via.placeholder.com/400x560/151B26/C8AA6E?text=Riftbound';
+
+  if (card.imageUrl && card.imageUrl.startsWith('http')) {
+    return card.imageUrl;
+  }
+  if (card.thumbnailUrl && card.thumbnailUrl.startsWith('http')) {
+    return card.thumbnailUrl;
+  }
+  if (card.highresUrl && card.highresUrl.startsWith('http')) {
+    return card.highresUrl;
+  }
+  if (card.imageId && card.imageId !== 'undefined') {
+    return buildCardImageUrl(card.imageId, size);
+  }
+  return 'https://via.placeholder.com/400x560/151B26/C8AA6E?text=Riftbound';
+}
+
+/**
  * Convierte el formato relacional normalizado de OpenRift
  * { printingIds: [...], printings: { [id]: {...} }, cards: { [id]: {...} } }
  * en una lista de objetos RiftCard listos para el renderizado.
@@ -106,6 +131,7 @@ function parseOpenRiftResponse(json: any): RiftCard[] {
         power: cardData.power !== undefined ? Number(cardData.power) : undefined,
         health: cardData.might !== undefined ? Number(cardData.might) : undefined,
         imageId,
+        imageUrl: buildCardImageUrl(imageId, '400w'),
         thumbnailUrl: buildCardImageUrl(imageId, '400w'),
         highresUrl: buildCardImageUrl(imageId, 'full'),
         prices: printing.prices || undefined,
@@ -147,6 +173,7 @@ function parseOpenRiftResponse(json: any): RiftCard[] {
       power: item.power !== undefined ? Number(item.power) : undefined,
       health: item.might !== undefined ? Number(item.might) : undefined,
       imageId,
+      imageUrl: buildCardImageUrl(imageId, '400w'),
       thumbnailUrl: buildCardImageUrl(imageId, '400w'),
       highresUrl: buildCardImageUrl(imageId, 'full'),
       prices: item.prices,

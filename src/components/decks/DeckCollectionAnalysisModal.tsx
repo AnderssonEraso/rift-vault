@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   View,
   ScrollView,
-  Image,
   Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Deck } from '@/types/deck';
 import { DeckCollectionAnalysis } from '@/utils/deckCollectionAnalysis';
@@ -159,7 +159,13 @@ export const DeckCollectionAnalysisModal: React.FC<DeckCollectionAnalysisModalPr
               {analysis.missingCards.map(item => (
                 <View key={item.cardId} style={styles.missingCardRow}>
                   {item.imageUrl ? (
-                    <Image source={{ uri: item.imageUrl }} style={styles.cardThumb} />
+                    <Image
+                      source={{ uri: item.imageUrl }}
+                      style={styles.cardThumb}
+                      contentFit="cover"
+                      transition={150}
+                      cachePolicy="memory-disk"
+                    />
                   ) : (
                     <View style={styles.cardThumbPlaceholder}>
                       <Ionicons name="image-outline" size={16} color="#64748B" />

@@ -6,9 +6,11 @@ import { MatchScreen } from './MatchScreen';
 import { ScannerScreen } from './ScannerScreen';
 import { CommunityHubScreen } from './CommunityHubScreen';
 import { TournamentScreen } from './TournamentScreen';
+import { OracleModal } from '@/components/ai/OracleModal';
 
 export const ToolsScreen: React.FC = () => {
   const [activeTool, setActiveTool] = useState<'hub' | 'trade' | 'match' | 'scanner' | 'community' | 'tournament'>('hub');
+  const [isOracleModalOpen, setIsOracleModalOpen] = useState(false);
 
   if (activeTool === 'tournament') {
     return <TournamentScreen onBack={() => setActiveTool('hub')} />;
@@ -43,8 +45,34 @@ export const ToolsScreen: React.FC = () => {
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.subtitle}>
-          Herramientas de escaneo, juego, cálculo de precios y utilidades para torneos oficiales de Riftbound.
+          Herramientas de IA, escaneo, juego, cálculo de precios y utilidades para torneos oficiales de Riftbound.
         </Text>
+
+        {/* Tarjeta 0: Oráculo del Nexo con IA de Google Gemini */}
+        <TouchableOpacity
+          style={[styles.toolCard, styles.aiHighlightCard]}
+          onPress={() => setIsOracleModalOpen(true)}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.toolIconBox, { backgroundColor: 'rgba(168, 85, 247, 0.2)' }]}>
+            <Ionicons name="sparkles" size={28} color="#C084FC" />
+          </View>
+          <View style={styles.toolInfo}>
+            <View style={styles.titleBadgeRow}>
+              <Text style={styles.toolTitle}>Oráculo del Nexo (IA Gemini)</Text>
+              <View style={[styles.newBadge, { backgroundColor: '#A855F7' }]}>
+                <Text style={[styles.newBadgeText, { color: '#FFFFFF' }]}>IA STUDIO</Text>
+              </View>
+            </View>
+            <Text style={styles.toolDesc}>
+              Consulta al asistente táctico impulsado por Google AI Studio. Analiza la consistencia de tus mazos, sinergias y reglas oficiales.
+            </Text>
+            <View style={[styles.toolBadge, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]}>
+              <Text style={[styles.toolBadgeText, { color: '#C084FC' }]}>Google Gemini • Estrategia • Auditor de Mazos</Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color="#C084FC" />
+        </TouchableOpacity>
 
         {/* Tarjeta 1: Escáner de Cartas TCG con Cámara */}
         <TouchableOpacity
@@ -182,6 +210,12 @@ export const ToolsScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Modal del Oráculo de IA de Google Gemini */}
+      <OracleModal
+        visible={isOracleModalOpen}
+        onClose={() => setIsOracleModalOpen(false)}
+      />
     </View>
   );
 };
@@ -226,6 +260,10 @@ const styles = StyleSheet.create({
   scannerHighlightCard: {
     borderColor: 'rgba(59, 130, 246, 0.4)',
     backgroundColor: '#0F1A2E',
+  },
+  aiHighlightCard: {
+    borderColor: 'rgba(168, 85, 247, 0.45)',
+    backgroundColor: '#150F28',
   },
   titleBadgeRow: {
     flexDirection: 'row',
