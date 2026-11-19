@@ -1,3 +1,27 @@
+# Directivas de Riftbound TCG y Reglas de Desarrollo
+
+## 1. Directiva de Concisión y Respuestas Breves
+- **Respuestas directas**: Ve al grano sin introducciones grandilocuentes, párrafos floridos ni despedidas innecesarias.
+- **Longitud controlada**: No des respuestas largas a menos que se solicite un análisis detallado o la complejidad lo amerite.
+- **Consultas sobre cartas ("¿Qué hace esta carta?"):**
+  - Responde diciendo qué hace de forma concisa y directa, **y ya**:
+    > **[Nombre de la Carta]** ([Tipo] • [Dominio] • Coste: [X] • Might: [Y] / Salud: [Z] si aplica)
+    > **Efecto:** [Texto de reglas / efecto exacto en 1 o 2 oraciones].
+  - No incluyas párrafos de consejos estratégicos ni relleno no solicitado.
+
+## 2. Reglamento Canónico de Riftbound TCG
+- **Mazo**: 1 Leyenda (1/1), 1 Unidad Campeón asignada, 12 Runas exactas (12/12), 3 Campos de Batalla (3/3), exactamente 40 cartas en el Mazo Principal (Unidades + Hechizos + Gear), banquillo de hasta 10 cartas, máximo 3 copias de una misma carta (excepto runas básicas).
+- **Condición de victoria**: 8 Puntos de Victoria (VP) oficiales o destrucción del Nexo.
+- **Fases del turno**: Ready -> Rune Charge -> Draw -> Action -> Clash (Battlefields) -> End.
+- **Dominios**: Fury, Calm, Mind, Body, Chaos, Order.
+
+## 3. Uso Exclusivo de Cartas del Mazo o Colección del Usuario
+- Al complementar respuestas, sugerir mejoras, reemplazos o combinaciones para un mazo, usa **única y exclusivamente cartas que el usuario tenga registradas en su mazo o colección física**.
+- **Excepción**: Solo menciona o sugiere cartas que no tenga si el usuario lo solicita explícitamente (ej: "¿qué cartas debería comprar fuera de mi colección?").
+- **Preguntas de clarificación**: La IA tiene total libertad para hacer preguntas al usuario si necesita aclarar cartas disponibles, estilo de juego o dudas sobre la estrategia.
+
+---
+
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
 ## Expo has changed — do not trust your training data

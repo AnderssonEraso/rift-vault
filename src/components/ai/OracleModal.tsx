@@ -75,28 +75,26 @@ export const OracleModal: React.FC<OracleModalProps> = ({
 
   const quickPrompts = [
     {
-      icon: 'analytics-outline',
-      label: deckFocus ? `Analizar mazo "${deckFocus.name}"` : 'Evaluar curva y balance de mi mazo',
-      prompt: deckFocus
-        ? `Por favor analiza en profundidad mi mazo "${deckFocus.name}". Evalúa su curva de energía, proporción de unidades vs hechizos y campos de batalla, y recomiéndame 2 mejoras tácticas.`
-        : 'Analiza mis mazos guardados y dame recomendaciones sobre cuál tiene mejor sinergia competitiva.',
-    },
-    {
-      icon: 'sparkles-outline',
-      label: '¿Qué cartas me recomiendas de mi colección?',
-      prompt: 'Revisa mi colección de cartas y dime cuáles son las joyas ocultas o mejores cartas que debería incluir en mis estrategias.',
+      icon: 'card-outline',
+      label: '¿Qué hace una carta?',
+      prompt: '¿Qué hace la carta Jinx y cuáles son sus habilidades?',
     },
     {
       icon: 'help-circle-outline',
-      label: 'Explicar reglas de campos de batalla',
-      prompt: 'Explícame de forma sencilla cómo funcionan los campos de batalla (Battlefields) en Riftbound TCG y cuándo conviene disputarlos.',
+      label: 'Explicar reglas de combate y campos',
+      prompt: 'Explícame de forma concisa cómo funcionan los campos de batalla y cómo se ganan los 8 puntos de victoria en Riftbound TCG.',
     },
     {
-      icon: 'flame-outline',
-      label: 'Sugerir combos con mi leyenda',
-      prompt: deckFocus?.legendCard
-        ? `¿Qué combos o jugadas poderosas puedo ejecutar alrededor de mi leyenda "${deckFocus.legendCard.name}"?`
-        : '¿Cuáles son las leyendas más fuertes del formato y cómo se construyen mazos alrededor de ellas?',
+      icon: 'analytics-outline',
+      label: deckFocus ? `Analizar mazo "${deckFocus.name}"` : 'Evaluar curva y balance de mazo',
+      prompt: deckFocus
+        ? `Analiza de forma concisa mi mazo "${deckFocus.name}". Evalúa curva de energía y recomiéndame 2 mejoras puntuales.`
+        : 'Analiza mis mazos guardados y dime cuál tiene mejor balance competitivo en 3 puntos clave.',
+    },
+    {
+      icon: 'sparkles-outline',
+      label: 'Joyas de mi colección',
+      prompt: 'Dime de forma breve qué cartas destacadas de mi colección debería priorizar en mis mazos.',
     },
   ];
 
@@ -303,7 +301,7 @@ export const OracleModal: React.FC<OracleModalProps> = ({
             ]}
             placeholder={
               isConfigured
-                ? 'Pregúntale al Oráculo (mazos, combos, reglas)...'
+                ? 'Pregunta qué hace una carta, reglas o mazos...'
                 : 'Configura tu clave en el perfil para chatear...'
             }
             placeholderTextColor={theme.textMuted}
